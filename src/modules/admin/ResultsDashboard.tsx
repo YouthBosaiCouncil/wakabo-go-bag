@@ -223,7 +223,7 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ session, itemList, 
                                                 itemStyle={{ color: 'hsl(var(--foreground))' }}
                                                 labelStyle={{ color: 'hsl(var(--muted-foreground))', marginBottom: '0.25rem' }}
                                                 cursor={{ fill: 'hsl(var(--primary))', opacity: 0.1, radius: 4 }}
-                                                formatter={(value: number) => [`${value} 票`, '選択数']}
+                                                formatter={(value: number | undefined) => [`${value ?? 0} 票`, '選択数']}
                                             />
                                             <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={32} animationDuration={1000}>
                                                 {results.map((entry, index) => (

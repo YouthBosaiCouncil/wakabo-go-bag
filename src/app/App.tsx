@@ -86,7 +86,12 @@ export default function App() {
             </div>
             <div className="flex flex-col items-center gap-6 w-full max-w-md mx-auto">
               <button onClick={() => setMode('join')} className="w-full py-4 text-xl bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold flex items-center justify-center">
-                <Users className="mr-2" />セッションに参加する
+                {mounted ? (
+                  <Users className="mr-2" />
+                ) : (
+                  <span className="mr-2 inline-block w-6" aria-hidden />
+                )}
+                セッションに参加する
               </button>
             </div>
           </div>
