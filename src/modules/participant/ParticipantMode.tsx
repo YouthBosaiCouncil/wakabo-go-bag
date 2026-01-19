@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { db, appId, doc, setDoc, serverTimestamp } from '../../lib/firebase';
 import { Card, Button, Item } from '../../components/ui';
 import { NotificationType, SessionInfo, ItemData } from '../../types';
@@ -54,23 +55,13 @@ const ParticipantMode: React.FC<Props> = ({ info, setNotification, onSubmitted }
                     submittedAt: serverTimestamp()
                 }, { merge: true });
             } else {
-                // ワークショップモード（個人参加）
-                // 匿名認証のUIDなどをキーにするのが理想だが、ここでは簡易的にランダムIDまたはlocalStorage等で管理されるIDを使用する想定
-                // 今回は簡易的に都度生成するID（または既存ロジックがあればそれに従うが、不明なので新規作成）
-                // 実際には App.tsx 等でユーザーIDを管理しているはずだが、propsには渡されていない。
-                // 既存の実装に合わせて、participants コレクションに addDoc するか、特定のIDで setDoc するか。
-                // ここでは auth.currentUser.uid を使いたいが、propsにないので import して使う。
-                const { auth } = await import('../../lib/firebase');
-                const uid = auth.currentUser?.uid;
-                if (uid) {
-                    const participantRef = doc(db, "artifacts", appId, "public", "data", "trainingSessions", info.session.id, "participants", uid);
-                    await setDoc(participantRef, {
-                        selectedItems: selectedItems,
-                        submittedAt: serverTimestamp()
-                    }, { merge: true });
-                } else {
-                    throw new Error("User not authenticated");
-                }
+                // ワークショップモード（個人参加）: 投票ごとに新しいIDで保存し、同一端末でも連続投票を許可
+                const participantId = uuidv4();
+                const participantRef = doc(db, "artifacts", appId, "public", "data", "trainingSessions", info.session.id, "participants", participantId);
+                await setDoc(participantRef, {
+                    selectedItems: selectedItems,
+                    submittedAt: serverTimestamp()
+                }, { merge: true });
             }
 
             setNotification({ type: 'success', message: '提出しました！' });
