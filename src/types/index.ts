@@ -43,6 +43,7 @@ export interface SessionInfo {
   teamNumber?: number;
   itemList: ItemList;
   sessionName: string;
+  sessionCollection?: string; // デフォルト: 'trainingSessions'
 }
 
 export interface TeamResult {
