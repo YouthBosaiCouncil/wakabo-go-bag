@@ -10,6 +10,7 @@ interface ResultsDashboardProps {
     session: { id: string; name: string; type: SessionType };
     itemList: ItemList;
     onBack: () => void;
+    sessionCollection?: string;
 }
 
 interface ChartData {
@@ -18,7 +19,7 @@ interface ChartData {
     category: string;
 }
 
-const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ session, itemList, onBack }) => {
+const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ session, itemList, onBack, sessionCollection = 'trainingSessions' }) => {
     const [results, setResults] = useState<ChartData[]>([]);
     const [loading, setLoading] = useState(true);
     const [participantCount, setParticipantCount] = useState(0);
@@ -37,7 +38,7 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ session, itemList, 
 
                 // コレクションパスの決定（授業モードかワークショップモードか）
                 const collectionPath = session.type === 'lesson' ? 'teams' : 'participants';
-                const q = query(collection(db, "artifacts", appId, "public", "data", "trainingSessions", session.id, collectionPath));
+                const q = query(collection(db, "artifacts", appId, "public", "data", sessionCollection, session.id, collectionPath));
 
                 const unsubscribe = onSnapshot(q, (snapshot) => {
                     if (!mountedRef.current) return;

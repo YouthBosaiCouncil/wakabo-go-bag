@@ -13,13 +13,13 @@ import {
   doc,
   onAuthStateChanged,
   signInAnonymously,
-} from "../../lib/firebase";
-import ParticipantMode from "../../modules/participant/ParticipantMode";
-import ResultsDashboard from "../../modules/admin/ResultsDashboard";
-import { Notification } from "../../components/ui";
+} from "../lib/firebase";
+import ParticipantMode from "../modules/participant/ParticipantMode";
+import ResultsDashboard from "../modules/admin/ResultsDashboard";
+import { Notification } from "../components/ui";
 import { Sun, Moon, Monitor } from "lucide-react";
-import type { NotificationType, ItemList, SessionInfo } from "../../types";
-import "../globals.css";
+import type { NotificationType, ItemList, SessionInfo } from "../types";
+import "./globals.css";
 
 type Phase = "loading" | "error" | "participating" | "results";
 

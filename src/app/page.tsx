@@ -1,6 +1,6 @@
 
-import App from './App';
+import PublicPage from './PublicPage';
 
 export default function Page() {
-  return <App />;
+  return <PublicPage />;
 }

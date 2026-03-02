@@ -192,6 +192,8 @@ export {
   // Auth
   onAuthStateChanged,
   signInAnonymously,
+  signInWithEmailAndPassword,
+  signOut,
   type User,
 } from 'firebase/auth';
 
