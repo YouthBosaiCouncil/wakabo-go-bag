@@ -46,6 +46,10 @@ npm audit --omit=dev
 
 ## UI検証用データ
 
+Firebase Admin 14の `jwks-rsa` がESM専用joseをCommonJSから読み込み、Vercelの実行時に500となる互換性問題があります（[上流の報告](https://github.com/firebase/firebase-admin-node/issues/3181)）。`jwks-rsa` 配下だけを同じJWK APIを持つjose 5系に固定し、署名・失効検証はAdmin SDKに任せます。`npm run test:runtime` はESMのrequireを無効にしたNodeでもAuth/Firestoreを読み込めることを検証し、ビルド前にも実行します。上流で修正された際にこの限定overrideを再評価してください。
+
+Vercel FunctionsはFirestoreと同じ東京の `hnd1` に固定しています。
+
 ```sh
 npx -y firebase-tools@latest emulators:start --project demo-wakabo --only auth,firestore
 # 別ターミナルで FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 と FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 を設定

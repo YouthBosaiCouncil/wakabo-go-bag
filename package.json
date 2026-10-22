@@ -5,11 +5,12 @@
   "scripts": {
     "dev": "next dev --webpack",
     "dev:turbo": "next dev --turbopack",
-    "prebuild": "node scripts/check-production.mjs && npm run -s lint",
+    "prebuild": "node scripts/check-production.mjs && npm run -s test:runtime && npm run -s lint",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "cross-env ESLINT_NO_PATCH=1 eslint .",
     "test:integration": "vitest run tests/integration.test.ts",
+    "test:runtime": "node --no-experimental-require-module -e \"require('firebase-admin/auth'); require('firebase-admin/firestore')\"",
     "test:emulator": "firebase emulators:exec --project demo-wakabo --only auth,firestore \"npm run test:integration\"",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
@@ -51,6 +52,9 @@
     "node": ">=22.0.0"
   },
   "overrides": {
-    "@grpc/grpc-js": "^1.14.6"
+    "@grpc/grpc-js": "^1.14.6",
+    "jwks-rsa": {
+      "jose": "^5.10.0"
+    }
   }
 }
