@@ -1,0 +1,8 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    { "collectionGroup": "v2RateLimits", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
+    { "collectionGroup": "v2Sessions", "fieldPath": "catalog", "indexes": [] },
+    { "collectionGroup": "v2Catalogs", "fieldPath": "items", "indexes": [] }
+  ]
+}

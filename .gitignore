@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Runtime credentials, migration backups and local diagnostics
+/.private/
+*-debug.log
+firebase-debug.log*
+/test-results/
+/playwright-report/
+!.env.example

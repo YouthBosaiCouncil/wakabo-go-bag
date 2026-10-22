@@ -12,7 +12,7 @@ import type { NotificationType } from '../../types';
 import '../globals.css';
 
 function AdminContent() {
-    const { user, loading, signOut } = useAdminAuth();
+    const { user, loading, error, signOut } = useAdminAuth();
     const router = useRouter();
     const [notification, setNotification] = useState<NotificationType>(null);
     const { theme, setTheme, resolvedTheme } = useTheme();
@@ -23,10 +23,12 @@ function AdminContent() {
     }, []);
 
     useEffect(() => {
-        if (!loading && !user) {
+        if (!loading && !user && !error) {
             router.replace('/admin/login');
         }
-    }, [user, loading, router]);
+    }, [user, loading, error, router]);
+
+    if (error) return <div role="alert" className="p-8 space-y-4"><p>{error}</p><Button onClick={() => router.replace('/admin/login')}>ログイン画面へ</Button></div>;
 
     if (loading || !user) {
         return (

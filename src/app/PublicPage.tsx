@@ -1,199 +1,133 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { useTheme } from "next-themes";
-import {
-  db,
-  appId,
-  auth,
-  collection,
-  query,
-  where,
-  getDocs,
-  getDoc,
-  doc,
-  onAuthStateChanged,
-  signInAnonymously,
-} from "../lib/firebase";
-import ParticipantMode from "../modules/participant/ParticipantMode";
-import ResultsDashboard from "../modules/admin/ResultsDashboard";
-import { Notification } from "../components/ui";
-import { Sun, Moon, Monitor } from "lucide-react";
-import type { NotificationType, ItemList, SessionInfo } from "../types";
-import "./globals.css";
+import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import { api } from "@/lib/api";
+import AppShell from "@/components/AppShell";
+import { Button, Card, Notification } from "@/components/ui";
+import ParticipantMode from "@/modules/participant/ParticipantMode";
+import type { Participation } from "@/domain/model";
+import type { NotificationType } from "@/types";
+const ResultsDashboard = dynamic(
+  () => import("@/modules/admin/ResultsDashboard"),
+  { loading: () => <p role="status">結果を読み込み中...</p> },
+);
 
-type Phase = "loading" | "error" | "participating" | "results";
-
-export default function PublicPage() {
-  const [phase, setPhase] = useState<Phase>("loading");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
+export default function PublicPage({
+  codeEntry = false,
+}: {
+  codeEntry?: boolean;
+}) {
+  const [info, setInfo] = useState<Participation | null>(null);
+  const [phase, setPhase] = useState<
+    "loading" | "join" | "error" | "participating" | "results"
+  >(codeEntry ? "join" : "loading");
+  const [error, setError] = useState("");
+  const [code, setCode] = useState("");
+  const [retry, setRetry] = useState(0);
   const [notification, setNotification] = useState<NotificationType>(null);
-  const [myItems, setMyItems] = useState<string[]>([]);
-  const { theme, setTheme, resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // 匿名認証
-  useEffect(() => {
-    if (!mounted) return;
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (!user) {
-        signInAnonymously(auth).catch((e) =>
-          console.error("Anonymous auth failed.", e)
-        );
-      }
-    });
-    return () => unsubscribe();
-  }, [mounted]);
-
-  // isActive な PublicSession を取得して自動参加
-  useEffect(() => {
-    if (!mounted) return;
-
-    const load = async () => {
-      try {
-        const q = query(
-          collection(db, "artifacts", appId, "public", "data", "PublicSessions"),
-          where("isActive", "==", true)
-        );
-        const snapshot = await getDocs(q);
-
-        if (snapshot.empty) {
-          setErrorMessage("現在、公開中のセッションはありません。");
-          setPhase("error");
-          return;
+    if (codeEntry) return;
+    const controller = new AbortController();
+    setPhase("loading");
+    api<Participation>("/join", {
+      method: "POST",
+      body: {},
+      participant: true,
+      signal: controller.signal,
+    })
+      .then((data) => {
+        if (!controller.signal.aborted) {
+          setInfo(data);
+          setPhase("participating");
         }
-
-        const sessionDoc = snapshot.docs[0];
-        const data = sessionDoc.data() as {
-          name?: string;
-          itemListId?: string;
-        };
-
-        if (!data.itemListId) {
-          setErrorMessage(
-            "セッションのアイテムリストが設定されていません。管理者にお問い合わせください。"
-          );
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setError(error.message);
           setPhase("error");
-          return;
         }
-
-        const itemListSnap = await getDoc(
-          doc(db, "artifacts", appId, "public", "data", "itemLists", data.itemListId)
-        );
-
-        if (!itemListSnap.exists()) {
-          setErrorMessage(
-            "アイテムリストが見つかりません。管理者にお問い合わせください。"
-          );
-          setPhase("error");
-          return;
-        }
-
-        const itemList = { id: itemListSnap.id, ...itemListSnap.data() } as ItemList;
-
-        setSessionInfo({
-          type: "workshop",
-          sessionId: sessionDoc.id,
-          sessionName: data.name ?? "",
-          itemList,
-          sessionCollection: "PublicSessions",
-        });
-        setPhase("participating");
-      } catch (e) {
-        console.error(e);
-        setErrorMessage(
-          "セッションの読み込み中にエラーが発生しました。ページを再読み込みしてください。"
-        );
-        setPhase("error");
-      }
-    };
-
-    load();
-  }, [mounted]);
-
-  const handleSubmitted = (selected: string[]) => {
-    setMyItems(selected);
-    setPhase("results");
-  };
-
+      });
+    return () => controller.abort();
+  }, [codeEntry, retry]);
+  async function join(event: React.FormEvent) {
+    event.preventDefault();
+    setError("");
+    setPhase("loading");
+    try {
+      setInfo(
+        await api<Participation>("/join", {
+          method: "POST",
+          body: { code },
+          participant: true,
+        }),
+      );
+      setPhase("participating");
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "参加できませんでした。",
+      );
+      setPhase("join");
+    }
+  }
   return (
-    <div className="relative min-h-screen bg-background text-foreground p-4 sm:p-6 md:p-8 transition-colors duration-300">
+    <AppShell>
       {notification && (
-        <Notification
-          message={notification.message}
-          type={notification.type}
-          onClose={() => setNotification(null)}
+        <Notification {...notification} onClose={() => setNotification(null)} />
+      )}
+      {phase === "loading" && (
+        <p role="status" className="text-center py-20">
+          認証・セッションを確認中...
+        </p>
+      )}
+      {phase === "error" && (
+        <Card className="max-w-lg mx-auto text-center space-y-4">
+          <p role="alert">{error}</p>
+          <Button onClick={() => setRetry((value) => value + 1)}>再試行</Button>
+        </Card>
+      )}
+      {phase === "join" && (
+        <Card className="max-w-lg mx-auto">
+          <h1 className="text-2xl font-bold mb-6">セッションに参加</h1>
+          <form onSubmit={join} className="space-y-4">
+            <label htmlFor="access-code">参加コード（16桁）</label>
+            <input
+              id="access-code"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              autoComplete="off"
+              autoCapitalize="characters"
+              maxLength={40}
+              required
+              className="block w-full rounded border border-border bg-input p-3 font-mono"
+            />
+            {error && (
+              <p role="alert" className="text-destructive">
+                {error}
+              </p>
+            )}
+            <Button type="submit" disabled={!hydrated}>
+              参加する
+            </Button>
+          </form>
+        </Card>
+      )}
+      {phase === "participating" && info && (
+        <ParticipantMode
+          key={`${info.session.id}:${info.session.generation}`}
+          info={info}
+          setNotification={setNotification}
+          onSubmitted={() => setPhase("results")}
         />
       )}
-
-      {/* テーマ切り替えボタン */}
-      {mounted && (
-        <div className="absolute top-4 right-4 z-50">
-          <button
-            onClick={() => {
-              const next =
-                theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
-              setTheme(next);
-            }}
-            className="p-2 rounded-full bg-white dark:bg-gray-800 shadow-lg"
-            title="テーマ切り替え"
-          >
-            {resolvedTheme === "light" && <Sun size={20} className="text-yellow-500" />}
-            {resolvedTheme === "dark" && <Moon size={20} className="text-blue-400" />}
-            {theme === "system" && <Monitor size={20} className="text-muted-foreground" />}
-          </button>
-        </div>
+      {phase === "results" && info && (
+        <ResultsDashboard
+          sessionId={info.session.id}
+          participant
+          onBack={() => setPhase("participating")}
+        />
       )}
-
-      <div className="max-w-7xl mx-auto">
-        {phase === "loading" && (
-          <div className="flex flex-col items-center justify-center min-h-[80vh] gap-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
-            <p className="text-muted-foreground">セッションを読み込み中...</p>
-          </div>
-        )}
-
-        {phase === "error" && (
-          <div className="flex flex-col items-center justify-center min-h-[80vh] gap-4">
-            <div className="bg-red-50 dark:bg-red-950/30 border border-red-400 rounded-xl px-6 py-5 max-w-md text-center">
-              <p className="text-red-600 dark:text-red-400 font-medium">{errorMessage}</p>
-            </div>
-          </div>
-        )}
-
-        {phase === "participating" && sessionInfo && (
-          <ParticipantMode
-            info={{
-              type: "workshop",
-              session: { id: sessionInfo.sessionId, name: sessionInfo.sessionName },
-              itemList: {
-                name: sessionInfo.itemList.name,
-                items: sessionInfo.itemList.items,
-              },
-              sessionCollection: "PublicSessions",
-            }}
-            setNotification={setNotification}
-            onSubmitted={handleSubmitted}
-          />
-        )}
-
-        {phase === "results" && sessionInfo && (
-          <ResultsDashboard
-            session={{
-              id: sessionInfo.sessionId,
-              name: sessionInfo.sessionName,
-              type: "workshop",
-            }}
-            itemList={sessionInfo.itemList}
-            onBack={() => setPhase("participating")}
-            sessionCollection="PublicSessions"
-          />
-        )}
-      </div>
-    </div>
+    </AppShell>
   );
 }

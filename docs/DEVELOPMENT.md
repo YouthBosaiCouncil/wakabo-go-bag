@@ -1,418 +1,57 @@
-# 開発ガイド
+# 設計・検証
 
-このドキュメントでは、プロジェクトの開発に関する詳細情報を提供します。
+| 場所 | 責務 |
+| --- | --- |
+| `src/domain/` | Zod契約、選択範囲、集計差分、CSV |
+| `src/server/http.ts` | IDトークン・失効・管理者・origin・JSON上限・レート制限 |
+| `src/server/service.ts` | DBパス、教材・セッション操作、参加資格、回答と集計 |
+| `src/server/firebase-admin.ts` | サーバー専用Firebase初期化 |
+| `src/lib/firebase.ts` | ブラウザのAuthのみ。Firestore/Functionsを読み込まない |
+| `src/lib/api.ts` | 認証準備を待ってBearerトークンを付けるHTTPクライアント |
+| `src/modules/` | 参加・管理UI。DBへ直接アクセスしない |
+| `scripts/` | 明示プロジェクト指定の運用・移行・エミュレーターseed |
 
-## 📋 目次
+パスは `artifacts/{projectId}/public/data` 配下です。旧来の `public` という文字列は公開権限を意味しません。
 
-- [開発環境のセットアップ](#開発環境のセットアップ)
-- [アーキテクチャ](#アーキテクチャ)
-- [コーディング規約](#コーディング規約)
-- [テスト](#テスト)
-- [デバッグ](#デバッグ)
-- [リファクタリング履歴](#リファクタリング履歴)
+| コレクション | 内容 |
+| --- | --- |
+| `v2Catalogs` / `versions` | 教材とバージョン履歴 |
+| `v2Sessions` | セッション、固定教材、受付状態、開催回 |
+| `v2Sessions/{id}/teams` | チーム番号・コード。管理者のみが取得 |
+| `v2Sessions/{id}/members` | UID・チームに対応する参加資格 |
+| `v2Sessions/{id}/answers` | 検証済み生回答 |
+| `v2Sessions/{id}/receipts` | UID・チーム・開催回・回答IDごとの受領記録 |
+| `v2Sessions/{id}/aggregates/current` | 回答数/提出チーム数、品目ID別選択数 |
+| `v2Invites` | 参加コードのSHA-256による索引 |
+| `v2Settings/public` | 公開セッションID |
+| `v2RateLimits` / `v2Audit` | 共有レート制限・管理操作履歴 |
 
-## 🛠 開発環境のセットアップ
+参加者APIは固定教材・自分のチーム情報・集計だけを返します。別タブで別チームに参加しても、回答payloadのチーム・開催回と参加資格を照合して保存します。
 
-### 必須ツール
+## 自動検証
 
-- Node.js 18.x 以上
-- npm / yarn / pnpm
-- Git
-- VS Code（推奨）
-
-### VS Code拡張機能（推奨）
-
-```json
-{
-  "recommendations": [
-    "dbaeumer.vscode-eslint",
-    "esbenp.prettier-vscode",
-    "bradlc.vscode-tailwindcss",
-    "ms-vscode.vscode-typescript-next",
-    "formulahendry.auto-rename-tag"
-  ]
-}
+```sh
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run test:emulator
+npm run build
+npm audit --omit=dev
 ```
 
-### 環境変数の管理
+単体テストは入力・CSV式注入・履歴変換を検証します。実Firestore/Authエミュレーターで、直接アクセス全拒否、偽トークン・一般アカウント拒否、管理者操作、チーム境界、再送・同時提出・削除・移行を検証します。エミュレーター未設定時には実Firebaseへ接続せず失敗します。
 
-開発環境では `.env.local` を使用:
+`.github/workflows/verify.yml` がmain/PRで同じ検証を行います。ActionsはSHAに固定し、CIへ本番鍵を渡しません。開発ツールだけに残る監査警告と本番依存を分けて扱います。
 
-```bash
-# .env.local を作成
-cp .env.example .env.local
+## UI検証用データ
 
-# 環境変数を編集
-code .env.local
+```sh
+npx -y firebase-tools@latest emulators:start --project demo-wakabo --only auth,firestore
+# 別ターミナルで FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 と FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 を設定
+npx tsx scripts/seed-emulator.mts
 ```
 
-## 🏗 アーキテクチャ
+Next側の `FIREBASE_PROJECT_ID` と `NEXT_PUBLIC_FIREBASE_PROJECT_ID` は `demo-wakabo`、`NEXT_PUBLIC_USE_EMULATORS=true` とダミーWeb設定を使います。seedの `qa-admin@example.test` のパスワードは `local-only-test-password` で、ローカル専用です。
 
-### ディレクトリ構造
-
-```
-src/
-├── app/                    # Next.js App Router
-│   ├── App.tsx            # ルートコンポーネント
-│   ├── globals.css        # グローバルスタイル
-│   ├── layout.tsx         # ルートレイアウト
-│   ├── page.tsx           # エントリーポイント
-│   └── api/               # APIルート（将来の拡張用）
-│
-├── components/            # 再利用可能なUIコンポーネント
-│   ├── ui.tsx             # 基本UIコンポーネント
-│   │   ├── Card          # カードコンテナ
-│   │   ├── Button        # ボタン
-│   │   ├── IconButton    # アイコンボタン
-│   │   ├── Item          # アイテム表示
-│   │   ├── Modal         # モーダルダイアログ
-│   │   └── Notification  # 通知トースト
-│   └── AddItemModal.tsx   # アイテム追加専用モーダル
-│
-├── lib/                   # ユーティリティとヘルパー
-│   ├── firebase.ts        # Firebase設定とヘルパー
-│   ├── helpers.ts         # 汎用ヘルパー関数
-│   ├── icons.ts           # アイコンマッピング
-│   ├── itemUtils.ts       # アイテムデータ処理
-│   ├── time.ts            # 日付・時刻処理
-│   └── utils.ts           # デバウンス等のユーティリティ
-│
-├── modules/               # 機能モジュール
-│   ├── admin/             # 管理者機能
-│   │   ├── AdminHub.tsx           # 管理ハブ
-│   │   ├── SessionManager.tsx     # セッション管理
-│   │   ├── ItemListManager.tsx    # アイテムリスト管理
-│   │   └── ResultsDashboard.tsx   # 結果分析
-│   └── participant/       # 参加者機能
-│       ├── JoinSession.tsx        # セッション参加
-│       └── ParticipantMode.tsx    # 参加者画面
-│
-└── types/                 # TypeScript型定義
-    ├── index.ts           # 共通型定義
-    └── env.d.ts           # 環境変数の型定義
-```
-
-### データフロー
-
-```
-User Action
-    ↓
-Component (React)
-    ↓
-Firebase SDK
-    ↓
-Firestore / Auth
-    ↓
-onSnapshot (リアルタイム購読)
-    ↓
-State Update
-    ↓
-Re-render
-```
-
-### 状態管理
-
-- **ローカル状態**: `useState` / `useReducer`
-- **グローバル状態**: なし（将来的にZustand等を検討）
-- **サーバー状態**: Firebase Firestore の `onSnapshot`
-
-## 📝 コーディング規約
-
-### TypeScript
-
-#### 型定義
-
-```typescript
-// ✅ 良い例: 明示的な型定義
-interface Session {
-  id: string;
-  name: string;
-  type: 'lesson' | 'workshop';
-  itemListId: string;
-  accessCode?: string;
-  isActive: boolean;
-  createdAt: FirestoreTimestamp | Date | null;
-}
-
-// ❌ 悪い例: any 型の使用
-const data: any = getData();
-```
-
-#### Null安全性
-
-```typescript
-// ✅ 良い例: オプショナルチェーン
-const code = session.accessCode ?? 'デフォルト値';
-
-// ❌ 悪い例: 強制的な非null断言
-const code = session.accessCode!;
-```
-
-### React
-
-#### コンポーネント定義
-
-```typescript
-// ✅ 良い例: Propsの型定義
-interface ButtonProps {
-  onClick: () => void;
-  children: ReactNode;
-  disabled?: boolean;
-  className?: string;
-}
-
-export const Button: React.FC<ButtonProps> = ({ 
-  onClick, 
-  children, 
-  disabled = false,
-  className = '' 
-}) => {
-  // ...
-};
-```
-
-#### Hooks の使用
-
-```typescript
-// ✅ 良い例: 依存配列の明示
-useEffect(() => {
-  const unsubscribe = onSnapshot(query, (snapshot) => {
-    // ...
-  });
-  return () => unsubscribe();
-}, [query]); // 依存配列を明示
-
-// ❌ 悪い例: 依存配列の省略
-useEffect(() => {
-  // ...
-}); // 依存配列なし
-```
-
-### CSS / Tailwind
-
-#### クラス名の順序
-
-1. レイアウト（flex, grid, position）
-2. サイズ（w-, h-, p-, m-）
-3. 色（bg-, text-, border-）
-4. その他（rounded, shadow, transition）
-
-```tsx
-// ✅ 良い例
-<div className="flex items-center justify-between p-4 bg-white text-gray-900 rounded-lg shadow-md">
-
-// ❌ 悪い例
-<div className="shadow-md text-gray-900 bg-white rounded-lg flex p-4 justify-between items-center">
-```
-
-#### テーマクラスの使用
-
-```tsx
-// ✅ 良い例: テーマクラスを使用
-<div className="theme-bg-primary theme-text-primary">
-
-// ❌ 悪い例: 直接色を指定
-<div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
-```
-
-### ファイル命名規則
-
-- **コンポーネント**: PascalCase（例: `AdminHub.tsx`）
-- **ユーティリティ**: camelCase（例: `firebase.ts`）
-- **型定義**: camelCase（例: `index.ts`）
-- **CSS**: kebab-case（例: `globals.css`）
-
-## 🧪 テスト
-
-### 現状
-
-現在、自動テストは実装されていません。
-
-### 推奨テスト戦略
-
-#### ユニットテスト
-
-```typescript
-// lib/__tests__/utils.test.ts
-import { normalizeItem, getItemName } from '../utils';
-
-describe('utils', () => {
-  describe('normalizeItem', () => {
-    it('文字列を ItemData に変換', () => {
-      const result = normalizeItem('水');
-      expect(result).toEqual({ name: '水' });
-    });
-
-    it('ItemData をそのまま返す', () => {
-      const item = { name: '水', icon: 'droplet' };
-      const result = normalizeItem(item);
-      expect(result).toBe(item);
-    });
-  });
-});
-```
-
-#### コンポーネントテスト
-
-```typescript
-// components/__tests__/Button.test.tsx
-import { render, fireEvent } from '@testing-library/react';
-import { Button } from '../ui';
-
-describe('Button', () => {
-  it('クリックイベントが発火する', () => {
-    const handleClick = jest.fn();
-    const { getByText } = render(
-      <Button onClick={handleClick}>クリック</Button>
-    );
-    
-    fireEvent.click(getByText('クリック'));
-    expect(handleClick).toHaveBeenCalledTimes(1);
-  });
-});
-```
-
-### テストの実行（将来）
-
-```bash
-# ユニットテスト
-npm run test
-
-# カバレッジ
-npm run test:coverage
-
-# E2Eテスト
-npm run test:e2e
-```
-
-## 🐛 デバッグ
-
-### Firestoreデバッグ
-
-```typescript
-// Firestore操作のログ出力
-import { setLogLevel } from 'firebase/firestore';
-
-if (process.env.NODE_ENV === 'development') {
-  setLogLevel('debug');
-}
-```
-
-### Reactコンポーネントデバッグ
-
-```typescript
-// useEffect のデバッグ
-useEffect(() => {
-  console.log('Component mounted');
-  console.log('State:', { value1, value2 });
-  
-  return () => {
-    console.log('Component unmounted');
-  };
-}, [value1, value2]);
-```
-
-### ネットワークデバッグ
-
-Chromeデベロッパーツール:
-1. F12 でデベロッパーツールを開く
-2. 「Network」タブを選択
-3. Firebase API リクエストを確認
-
-### パフォーマンスデバッグ
-
-React DevTools Profiler:
-1. React DevTools をインストール
-2. 「Profiler」タブで記録開始
-3. 操作を実行
-4. レンダリング時間を分析
-
-## 📚 リファクタリング履歴
-
-### 2025年10月26日 - 大規模リファクタリング
-
-詳細は `REFACTORING_SUMMARY.md` を参照。
-
-**主な変更点**:
-- 型安全性の向上（TypeScriptエラー0件達成）
-- CSS Modulesの廃止、globals.cssへの統合
-- アクセシビリティの改善
-- 型定義の強化と統一
-
-**影響範囲**:
-- `src/types/index.ts` - 型定義の追加
-- `src/components/ui.tsx` - アクセシビリティ改善
-- `src/app/globals.css` - スタイル統合
-- `src/modules/**/*.tsx` - 型の統一
-
-## 🔄 CI/CD
-
-### GitHub Actions（推奨設定）
-
-```yaml
-# .github/workflows/ci.yml
-name: CI
-
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - run: npm ci
-      - run: npm run lint
-
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - run: npm ci
-      - run: npm run build
-```
-
-## 🚀 デプロイメント
-
-### 環境別設定
-
-| 環境 | ブランチ | デプロイ先 | 自動デプロイ |
-|------|---------|-----------|------------|
-| 開発 | develop | Vercel Preview | ✅ |
-| 本番 | main | Vercel Production | ✅ |
-
-### デプロイ前チェックリスト
-
-- [ ] Lintエラーなし
-- [ ] ビルド成功
-- [ ] 環境変数の設定
-- [ ] Firebaseルールの確認
-- [ ] パフォーマンステスト
-
-## 📖 参考資料
-
-### 公式ドキュメント
-
-- [Next.js Documentation](https://nextjs.org/docs)
-- [React Documentation](https://react.dev)
-- [TypeScript Documentation](https://www.typescriptlang.org/docs)
-- [Tailwind CSS Documentation](https://tailwindcss.com/docs)
-- [Firebase Documentation](https://firebase.google.com/docs)
-
-### コミュニティ
-
-- [Next.js GitHub Discussions](https://github.com/vercel/next.js/discussions)
-- [React Discord](https://discord.gg/react)
-
----
-
-**貢献**: このドキュメントへの改善提案を歓迎します！
+初回認証、公開/コード/チーム参加、連続回答、チーム再提出、閉鎖・再試行、教材編集、CSV、キーボード、モーダルのEscape/フォーカス復帰、スマートフォン幅、ダークモード、コンソールを確認します。実機Safariと大規模負荷試験は別途必要です。

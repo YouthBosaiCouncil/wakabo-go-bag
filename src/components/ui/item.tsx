@@ -3,7 +3,7 @@ import { XCircle } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { ItemData } from '../../types';
-import { getIconComponent } from '../../lib/icons';
+import { iconMap } from '../../lib/icons';
 import { normalizeItem, getItemName } from '../../lib/utils';
 
 function cn(...inputs: ClassValue[]) {
@@ -16,18 +16,20 @@ interface ItemProps {
     onClick: () => void;
     isEditable?: boolean;
     onDelete?: () => void;
+    disabled?: boolean;
 }
 
-export const Item: React.FC<ItemProps> = ({ item, isSelected, onClick, isEditable = false, onDelete }) => {
+export const Item: React.FC<ItemProps> = ({ item, isSelected, onClick, isEditable = false, onDelete, disabled = false }) => {
     const itemData = normalizeItem(item);
     const itemName = getItemName(item);
-    const IconComponent = getIconComponent(itemData.icon);
+    const IconComponent = iconMap[itemData.icon as keyof typeof iconMap] ?? iconMap.package;
 
+    const Tag = isEditable ? 'div' : 'button';
     return (
-        <div
-            onClick={!isEditable ? onClick : undefined}
+        <Tag
+            {...(!isEditable ? { type: 'button' as const, 'aria-pressed': isSelected, disabled, onClick } : {})}
             className={cn(
-                'relative p-3 rounded-xl transition-all duration-200 text-sm text-center border flex flex-col items-center gap-2 group',
+                'relative p-3 rounded-xl transition-all duration-200 text-sm text-center border flex flex-col items-center gap-2 group focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-60',
                 isEditable ? '' : 'cursor-pointer',
                 isSelected
                     ? 'bg-primary text-primary-foreground border-primary shadow-md font-bold scale-105'
@@ -69,6 +71,6 @@ export const Item: React.FC<ItemProps> = ({ item, isSelected, onClick, isEditabl
                     <XCircle size={18} />
                 </button>
             )}
-        </div>
+        </Tag>
     );
 };

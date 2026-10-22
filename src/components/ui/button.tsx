@@ -9,11 +9,10 @@ function cn(...inputs: ClassValue[]) {
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: 'default' | 'secondary' | 'destructive' | 'ghost' | 'link' | 'glass';
     size?: 'default' | 'sm' | 'lg' | 'icon';
-    asChild?: boolean;
 }
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-    ({ className, variant = 'default', size = 'default', asChild = false, ...props }, ref) => {
+    ({ className, variant = 'default', size = 'default', ...props }, ref) => {
         return (
             <button
                 className={cn(
@@ -42,9 +41,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
-export interface IconButtonProps extends ButtonProps {
-    // Icon button specific props if any
-}
+export type IconButtonProps = ButtonProps;
 
 const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
     ({ className, size = 'icon', variant = 'ghost', ...props }, ref) => {

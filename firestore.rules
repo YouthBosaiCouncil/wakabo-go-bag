@@ -1,38 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // artifacts配下のデータへのアクセス制御
-    match /artifacts/{appId}/public/data/{document=**} {
-      // 認証されたユーザーのみアクセス可能
-      allow read, write: if request.auth != null;
-      
-      // より細かい制御が必要な場合のルール例：
-      // セッション管理は管理者のみ
-      // match /trainingSessions/{sessionId} {
-      //   allow create, update, delete: if request.auth != null && isAdmin();
-      //   allow read: if request.auth != null;
-      // }
-      
-      // チームデータは該当セッションの参加者のみ
-      // match /trainingSessions/{sessionId}/teams/{teamId} {
-      //   allow read, update: if request.auth != null && 
-      //     (isAdmin() || belongsToSession(sessionId));
-      //   allow create, delete: if request.auth != null && isAdmin();
-      // }
-    }
-    
-    // その他のドキュメントは拒否
+    // Application data, including legacy paths, is server-only.
+    // The server uses IAM and independently verifies ID tokens, roles and membership.
     match /{document=**} {
       allow read, write: if false;
     }
   }
-  
-  // ヘルパー関数（必要に応じて実装）
-  // function isAdmin() {
-  //   return request.auth.token.admin == true;
-  // }
-  
-  // function belongsToSession(sessionId) {
-  //   return exists(/databases/$(database)/documents/artifacts/$(appId)/public/data/trainingSessions/$(sessionId)/participants/$(request.auth.uid));
-  // }
 }

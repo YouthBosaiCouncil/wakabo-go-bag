@@ -1,0 +1,10 @@
+.private
+.env*
+.git
+.next/
+node_modules/
+*.log
+*.tsbuildinfo
+coverage/
+test-results/
+playwright-report/

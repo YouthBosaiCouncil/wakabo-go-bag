@@ -1,5 +1,7 @@
 # プロジェクトリファクタリング完了報告
 
+> 以下は2025年の履歴です。現在の設計と運用は [DEVELOPMENT.md](DEVELOPMENT.md) と [FIREBASE_GUIDE.md](FIREBASE_GUIDE.md) を参照してください。
+
 ## 実施日
 2025年10月26日
 
