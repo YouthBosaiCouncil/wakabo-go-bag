@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 import type { ReactNode } from "react";
 export default function AppShell({ children }: { children: ReactNode }) {
-  const { setTheme, theme } = useTheme();
+  const { setTheme, resolvedTheme } = useTheme();
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-8">
       <header className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-4 mb-8 border-b border-border pb-4">
@@ -18,7 +18,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <Link href="/join">コードで参加</Link>
           <button
             type="button"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
             className="rounded border border-border px-3 py-2"
           >
             テーマ切り替え
