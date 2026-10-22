@@ -1,7 +1,22 @@
 {
   "indexes": [],
   "fieldOverrides": [
-    { "collectionGroup": "v2RateLimits", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
+    {
+      "collectionGroup": "teams",
+      "fieldPath": "accessCode",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "v2RateLimits",
+      "fieldPath": "expiresAt",
+      "ttl": false,
+      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION" }]
+    },
     { "collectionGroup": "v2Sessions", "fieldPath": "catalog", "indexes": [] },
     { "collectionGroup": "v2Catalogs", "fieldPath": "items", "indexes": [] }
   ]

@@ -18,6 +18,8 @@ import {
 import { WorkspaceService } from "../src/server/service";
 import { adminAuth, adminDb } from "../src/server/firebase-admin";
 import { handle } from "../src/server/http";
+import { handleMaintenance } from "../src/server/maintenance";
+import { Timestamp } from "firebase-admin/firestore";
 import type { Actor } from "../src/domain/model";
 
 const projectId = "demo-wakabo";
@@ -420,6 +422,40 @@ describe("server workflows", () => {
 });
 
 describe("HTTP authentication and input boundary", () => {
+  it("protects scheduled cleanup and deletes only expired rate limits", async () => {
+    const oldSecret = process.env.CRON_SECRET;
+    process.env.CRON_SECRET = "test-only-maintenance-secret-with-32-characters";
+    try {
+      const url = "http://localhost/api/maintenance";
+      expect((await handleMaintenance(new Request(url))).status).toBe(401);
+      expect(
+        (
+          await handleMaintenance(
+            new Request(url, { headers: { authorization: "Bearer forged" } }),
+          )
+        ).status,
+      ).toBe(401);
+      const limits = service.root.collection("v2RateLimits");
+      await limits
+        .doc("expired")
+        .set({ expiresAt: Timestamp.fromMillis(Date.now() - 60_000) });
+      await limits
+        .doc("active")
+        .set({ expiresAt: Timestamp.fromMillis(Date.now() + 60_000) });
+      const result = await handleMaintenance(
+        new Request(url, {
+          headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
+        }),
+      );
+      expect(result.status).toBe(200);
+      expect(await result.json()).toEqual({ deleted: 1, hasMore: false });
+      expect((await limits.doc("active").get()).exists).toBe(true);
+      expect((await limits.doc("expired").get()).exists).toBe(false);
+    } finally {
+      if (oldSecret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = oldSecret;
+    }
+  });
   async function token(admin: boolean) {
     const email = `${crypto.randomUUID()}@example.test`;
     const password = "test-only-strong-password";

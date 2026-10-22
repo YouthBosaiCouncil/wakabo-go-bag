@@ -13,7 +13,8 @@ Authenticationでは匿名認証とメール・パスワードを使用します
 | `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | クライアントのプロジェクトID |
 | `NEXT_PUBLIC_FIREBASE_APP_ID` | WebアプリID |
 | `FIREBASE_PROJECT_ID` | サーバーの同一プロジェクトID |
-| `FIREBASE_SERVICE_ACCOUNT_JSON` | サーバー専用アカウントのJSON。sensitive変数として保存 |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | サーバー専用アカウントのJSON。Secret変数として保存 |
+| `CRON_SECRET` | 32文字以上のランダム値。定期削除APIのBearer認証用Secret |
 
 サーバー用IAM権限は `roles/datastore.user` と `roles/firebaseauth.viewer` に限定します。秘密鍵はGit、チャット、NEXT_PUBLIC変数に入れません。本番ビルドは必須設定、プロジェクトの一致、エミュレーター無効を検査します。
 
@@ -62,7 +63,7 @@ npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes --p
 
 - セッションは受付終了状態で作成されます。「受付を開始」後、公開型は「トップに公開」を押します。公開対象は単一ポインターで原子的に切り替えます。
 - 削除は先に閉鎖し、回答・参加資格・受領記録・コードも削除します。失敗時は管理画面から再試行できます。
-- UIDごとのレート制限と、コード参加時のIP制限を使用します。`v2RateLimits.expiresAt` のTTLをインデックス設定に含めています。
+- UIDごとのレート制限と、コード参加時のIP制限を使用します。既存SparkプロジェクトではFirestore TTLが課金必須のため、Vercel Cronが毎日18:00 UTC（日本時間3時台）に期限切れ記録を削除します。`CRON_SECRET` を検証し、1回最大8,000件・45秒を目安に処理します。更新中の記録を消さないようトランザクションで期限を再検証します。ログの `hasMore: true` が継続する場合は件数と無料枠を確認して手動実行・上限を調整してください。
 - `v2Audit` とAPIのrequest IDで管理操作・障害を追跡します。機密情報はログへ出しません。
 - バックアップ/PITR、IAM・鍵、認証アカウント、Vercel利用量・エラーを定期確認してください。PITRの保持・料金方針は運用側で決めます。
 - 集計1文書のトランザクションは授業・ワークショップ規模向けです。大規模同時イベントへ拡大する前に負荷試験し、必要ならシャード集計へ変更します。

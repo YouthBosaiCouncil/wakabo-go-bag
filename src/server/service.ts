@@ -92,6 +92,38 @@ export class WorkspaceService {
     return snap.docs.map((d) => ({ ...d.data(), id: d.id }) as Catalog);
   }
 
+  async cleanupRateLimits(deadline = Date.now() + 45_000) {
+    const cutoff = Timestamp.now();
+    let deleted = 0;
+    for (let page = 0; page < 20 && Date.now() < deadline; page++) {
+      const expired = await this.root
+        .collection("v2RateLimits")
+        .where("expiresAt", "<=", cutoff)
+        .limit(400)
+        .get();
+      if (expired.empty) return { deleted, hasMore: false };
+      deleted += await this.db.runTransaction(async (tx) => {
+        const current = await tx.getAll(...expired.docs.map((doc) => doc.ref));
+        let count = 0;
+        for (const doc of current) {
+          // A request may renew a limit after the query. Recheck in the transaction
+          // so cleanup never removes a newly active limit.
+          if (doc.data()?.expiresAt?.toMillis() <= cutoff.toMillis()) {
+            tx.delete(doc.ref);
+            count++;
+          }
+        }
+        return count;
+      });
+    }
+    const remaining = await this.root
+      .collection("v2RateLimits")
+      .where("expiresAt", "<=", cutoff)
+      .limit(1)
+      .get();
+    return { deleted, hasMore: !remaining.empty };
+  }
+
   async saveCatalog(actor: Actor, input: unknown, id?: string) {
     requireAdmin(actor);
     const data = catalogInputSchema.parse(input);
